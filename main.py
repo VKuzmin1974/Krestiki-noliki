@@ -90,6 +90,7 @@ async def stop(message: types.message):
         del db["games"][g_id]
         db["users"][uid]["game"] = None
         save_json(db)
+        await message.answer("игра остановлена")
 
 
 def print_table(table):

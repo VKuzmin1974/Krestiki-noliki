@@ -1,6 +1,6 @@
 import aiogram
 import asyncio
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher, F, types
 import random
 from os import getenv
 from dotenv import load_dotenv
@@ -75,7 +75,6 @@ async def join(message: types.message):
     else:
         await message.answer('Не удалось подключиться')
 
-
 @dp.message(Command('stop'))
 async def stop(message: types.message):
     uid = str(message.from_user.id)
@@ -93,6 +92,47 @@ async def stop(message: types.message):
         await message.answer("игра остановлена")
 
 
+@dp.message(F.text)
+async def game(message: types.message):
+    uid = str(message.from_user.id)
+    if db["users"][uid]["state"] != 'играет':
+        return
+    if not message.text.isdigit():
+        await message.answer('Введите число от 1 до 9.')
+        return
+    move = int(message.text)
+    if not 1 <= move <= 9:
+        await message.answer('Введите число от 1 до 9.')
+        return
+    g_id = db["users"][uid]["game"]
+    if db["games"][g_id]["table"][move-1] != ".":
+        await message.answer('Эта клетка уже занята')
+        return
+    if db["games"][g_id]['move'] != db["users"][uid]["point"]:
+        await message.answer('Сейчас не Ваш ход')
+        return
+    if db["users"][uid]["point"] == 'крестики':
+        db["games"][g_id]["table"][move - 1] = "X"
+        db["games"][g_id]["move"] = "нолики"
+        p2 = db["games"][g_id]["player2"]
+        await bot.send_message(p2, print_table(db["games"][g_id]["table"]))
+    else:
+        db["games"][g_id]["table"][move - 1] = "0"
+        db["games"][g_id]["move"] = "крестики"
+        p1 = db["games"][g_id]["player1"]
+        await bot.send_message(p1, print_table(db["games"][g_id]["table"]))
+    state = check_table(db["games"][g_id]["table"])
+    save_json(db)
+    if not state:
+        await message.answer('Ход сделан')
+        return
+    if state == 'крестики': # крестики выиграли
+        pass
+    if state == 'нолики': # нолики выиграли
+        pass
+    if state == 'ничья': # ничья
+        pass
+
 def print_table(table):
     return (f'Сейчас Ваш ход, выберите клетку от 1 до 9\n'
             f'1 2 3\n'
@@ -101,6 +141,32 @@ def print_table(table):
             f'{table[0]} {table[1]} {table[2]}\n'
             f'{table[3]} {table[4]} {table[5]}\n'
             f'{table[6]} {table[7]} {table[8]}\n')
+
+
+def check_table(table):
+    m = {'X': 'крестики', '0': 'нолики'}
+    if table[0] == table[1] == table[2] != '.':
+        return m[table[0]]
+    elif table[3] == table[4] == table[5] != '.':
+        return m[table[3]]
+    elif table[6] == table[7] == table[8] != '.':
+        return m[table[7]]
+    elif table[0] == table[4] == table[8] != '.':
+        return m[table[4]]
+    elif table[6] == table[4] == table[2] != '.':
+        return m[table[6]]
+    elif table[0] == table[3] == table[6] != '.':
+        return m[table[0]]
+    elif table[1] == table[4] == table[7] != '.':
+        return m[table[1]]
+    elif table[2] == table[5] == table[8] != '.':
+        return m[table[8]]
+    else:
+        if '.' in table:
+            return
+        else:
+            return 'ничья'
+
 
 
 async def main():

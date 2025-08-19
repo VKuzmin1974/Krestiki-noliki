@@ -19,7 +19,7 @@ async def start(message: types.message):
     if uid in db["users"]:
         await message.answer('Вы уже зарегистрированы')
     else:
-        db["users"][uid] = {'state': 'ожидание'}
+        db["users"][uid] = {'state': 'ожидание', 'wins': 0, 'losses': 0, 'ties': 0}
         save_json(db)
         await message.answer('Добро пожаловать')
 
@@ -95,6 +95,23 @@ async def stop(message: types.message):
 @dp.message(F.text)
 async def game(message: types.message):
     uid = str(message.from_user.id)
+    if db["users"][uid]["state"] == 'завершение':
+        g_id = db["users"][uid]["game"]
+        p2 = db["games"][g_id]["player2"]
+        p1 = db["games"][g_id]["player1"]
+        if message.text.lower() == 'да':
+            db["users"][p1]["state"] = 'играет'
+            db["users"][p2]["state"] = 'играет'
+            save_json(db)
+            await bot.send_message(p2, print_table(db["games"][g_id]["table"]))
+            await bot.send_message(p1, print_table(db["games"][g_id]["table"]))
+            return
+        db["users"][p1]["state"] = 'ожидание'
+        db["users"][p2]["state"] = 'ожидание'
+        db["users"][p2]["game"] = None
+        db["users"][p1]["game"] = None
+        del db["games"][g_id]
+        save_json(db)
     if db["users"][uid]["state"] != 'играет':
         return
     if not message.text.isdigit():
@@ -126,12 +143,42 @@ async def game(message: types.message):
     if not state:
         await message.answer('Ход сделан')
         return
+    p2 = db["games"][g_id]["player2"]
+    p1 = db["games"][g_id]["player1"]
     if state == 'крестики': # крестики выиграли
-        pass
+        db['users'][p1]['wins'] += 1
+        db['users'][p2]['losses'] += 1
+        await bot.send_message(p1, f'Вы победили. {get_stats(p1)}')
+        await bot.send_message(p2, f'Вы проиграли. {get_stats(p2)}')
     if state == 'нолики': # нолики выиграли
-        pass
+        db['users'][p2]['wins'] += 1
+        db['users'][p1]['losses'] += 1
+        await bot.send_message(p2, f'Вы победили. {get_stats(p2)}')
+        await bot.send_message(p1, f'Вы проиграли. {get_stats(p1)}')
     if state == 'ничья': # ничья
-        pass
+        db['users'][p2]['ties'] += 1
+        db['users'][p1]['ties'] += 1
+        await bot.send_message(p2, f'Ничья. {get_stats(p2)}')
+        await bot.send_message(p1, f'Ничья. {get_stats(p1)}')
+    db["users"][p1]["state"] = 'завершение'
+    db["users"][p2]["state"] = 'завершение'
+    db["games"][g_id]["table"] = ['.' for _ in range(9)]
+    db["games"][g_id]["move"] = 'крестики'
+    db["games"][g_id]["player1"] = p2
+    db["games"][g_id]["player2"] = p1
+    if db["users"][p1]["point"] == 'крестики':
+        db["users"][p1]["point"] = 'нолики'
+    else:
+        db["users"][p1]["point"] = 'крестики'
+    if db["users"][p2]["point"] == 'крестики':
+        db["users"][p2]["point"] = 'нолики'
+    else:
+        db["users"][p2]["point"] = 'крестики'
+    await bot.send_message(p2, f'Игра завершилась, если хотите реванш - "да"')
+    await bot.send_message(p1, f'Игра завершилась, если хотите реванш - "да"')
+
+    save_json(db)
+
 
 def print_table(table):
     return (f'Сейчас Ваш ход, выберите клетку от 1 до 9\n'
@@ -167,6 +214,14 @@ def check_table(table):
         else:
             return 'ничья'
 
+
+def get_stats(uid):
+    return (
+            f'Ваша статистика:\n'
+            f'{db["users"][uid]["wins"]} побед\n'
+            f'{db["users"][uid]["losses"]} поражений\n'
+            f'{db["users"][uid]["ties"]} ничьих\n'
+            )
 
 
 async def main():
